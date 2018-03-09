@@ -11,8 +11,6 @@ import nachos.machine.*;
  *
  * @see	nachos.threads.Condition
  */
-
-/** the implementation is not allowed to include semaphores, so we use locks instead. For the data structures, mainly I referred to the functions in Lock class and do some modifications to fit this environment. The implementation is very much like the implementation of Condition, but there are still several things different: To make the operation atomic, we must disable interrupt from beginning to the end in all functions. And I use waitQueue instead of linkedlist so that in task V the strategy is not like round-robin one. */
 public class Condition2 {
     /**
      * Allocate a new condition variable.
@@ -33,18 +31,15 @@ public class Condition2 {
      * automatically reacquire the lock before <tt>sleep()</tt> returns.
      */
     public void sleep() {
+	//this is a lot like how a semaphore works.  you protect the thread by disabling stuff and then putting it to sleep
 	Lib.assertTrue(conditionLock.isHeldByCurrentThread());
 
 	boolean intStatus = Machine.interrupt().disable();
-
-	conditionLock.release();
-
 	KThread thread = KThread.currentThread();
 
 	waitQueue.waitForAccess(thread);
-
+	conditionLock.release();
 	KThread.sleep();
-
 	conditionLock.acquire();
 
 	Machine.interrupt().restore(intStatus);
@@ -55,12 +50,15 @@ public class Condition2 {
      * current thread must hold the associated lock.
      */
     public void wake() {
+	//put it in the ready queue
 	Lib.assertTrue(conditionLock.isHeldByCurrentThread());
 
 	boolean intStatus = Machine.interrupt().disable();
 
-	if ((conditionWaiter = waitQueue.nextThread()) != null)
-	    conditionWaiter.ready();
+	KThread thread = waitQueue.nextThread();
+	if (thread != null) {
+	    thread.ready();
+	}
 
 	Machine.interrupt().restore(intStatus);
     }
@@ -70,18 +68,21 @@ public class Condition2 {
      * thread must hold the associated lock.
      */
     public void wakeAll() {
+	//put all the bros in the ready queue
 	Lib.assertTrue(conditionLock.isHeldByCurrentThread());
 
 	boolean intStatus = Machine.interrupt().disable();
 
-	while ((conditionWaiter = waitQueue.nextThread()) != null)
-	    conditionWaiter.ready();
+	KThread thread = waitQueue.nextThread();
+	while (thread != null) {
+	    thread.ready();
+	    thread = waitQueue.nextThread();
+	}
 
 	Machine.interrupt().restore(intStatus);
     }
 
     private Lock conditionLock;
-    private KThread conditionWaiter = null;
-    private ThreadQueue waitQueue =
-	ThreadedKernel.scheduler.newThreadQueue(true); /** same as the waitqueue in Lock.java */
+    //wait queue for all the bros that are being conditioned
+    private ThreadQueue waitQueue = ThreadedKernel.scheduler.newThreadQueue(false);
 }

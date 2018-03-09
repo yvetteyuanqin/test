@@ -9,27 +9,11 @@ import nachos.machine.*;
  * be a time when both a speaker and a listener are waiting, because the two
  * threads can be paired off at this point.
  */
-
-	/** It's just a common algorithm, but I need to note that in my algorithm, each time a speaker/listener wake up the listeners/speakers, he must wake all because otherwise there will be more than one pairs at the same time, but we do not have buffer, so an overwrite will be probable to happen. */
-
 public class Communicator {
     /**
      * Allocate a new communicator.
      */
-    private int message;
-    private int numOfSpeaker, numOfListener;
-    private boolean messageWritten;
-    private Lock conditionLock;
-    private Condition speakerCondition, listenerCondition, speakerReturnCondition;
     public Communicator() {
-    	this.message = 0;
-    	this.numOfSpeaker = 0;
-    	this.numOfListener = 0;
-	this.messageWritten = false;
-    	this.conditionLock = new Lock();
-    	this.speakerCondition = new Condition(this.conditionLock);
-    	this.listenerCondition = new Condition(this.conditionLock);
-	this.speakerReturnCondition = new Condition(this.conditionLock);
     }
 
     /**
@@ -43,29 +27,16 @@ public class Communicator {
      * @param	word	the integer to transfer.
      */
     public void speak(int word) {
-	conditionLock.acquire();
-	//System.out.println("conditionLock acquired by speaker");
-	while ((numOfListener == 0) || (messageWritten)){ // you don't want to overwrite the previous word if it has not been used, and you want someone to listen to you
-	    numOfSpeaker += 1;
-	    //System.out.println("numOfListener: "+numOfListener);
-	    //System.out.println("numOfSpeaker: "+numOfSpeaker);
-	    //System.out.println("speaker go to sleep");
-	    speakerCondition.sleep();
-	    //System.out.println("speaker wake up");
+	//one thread has something to say.  
+	comLock.acquire();
+	//if nobody is listening or if something has already been said, speaker goes to sleep
+	while (listening == 0 || message != null) {
+	    speaker.sleep();
 	}
-	//System.out.println(numOfListener);
-	message = word;
-	//System.out.println("written " + word);
-	messageWritten = true;
-	numOfListener = 0;
-	//System.out.println("numOfListener become 0");
-	listenerCondition.wakeAll();
-	//System.out.println("speaker go to sleep");
-	speakerReturnCondition.sleep(); //this is to ensure that only when some listener has listened the word that the speaker will return
-	//System.out.println("speaker wake up");
-	//System.out.println("speaker " + word + " returned.");
-	//System.out.println("conditionLock released by speaker");
-	conditionLock.release();
+	//make a new message and wake up someone to listen
+	message = new Integer(word);
+	listener.wake();
+	comLock.release();
     }
 
     /**
@@ -73,27 +44,78 @@ public class Communicator {
      * the <i>word</i> that thread passed to <tt>speak()</tt>.
      *
      * @return	the integer transferred.
-     */    
+     */
     public int listen() {
-	conditionLock.acquire();
-	//System.out.println("conditionLock acquired by listener");
-	while (messageWritten == false){ // when there is no message, just sleep
-	    numOfListener += 1;
-	    //System.out.println("numOfListener: " + numOfListener);
-	    //System.out.println("listener go to sleep");
-	    speakerCondition.wakeAll();
-	    listenerCondition.sleep();
-	    //System.out.println("listener wake up");
+	//there's another thread listening
+	comLock.acquire();
+	listening++;
+	//if there's not a message for the listener to hear, wake up a speaker and then immediately goes to sleep
+	while (message == null) {
+	    speaker.wake();
+	    listener.sleep();
 	}
-	int word = message;
-	//System.out.println("read " + word);
-	messageWritten = false;
-	numOfSpeaker = 0;
-	speakerCondition.wakeAll();
-	speakerReturnCondition.wake();
-	//System.out.println("listener " + word + " returned.");
-	//System.out.println("conditionLock released by listener");
-	conditionLock.release();
-	return word;
+	//this thread hears the message and there is one fewer listener
+	int receivedMessage = message.intValue();
+	message = null;
+	listening--;
+	comLock.release();
+	return receivedMessage;
     }
+
+    private static class Speaker implements Runnable {
+	Speaker(Communicator com, String name) {
+	    this.com = com;
+	    this.name = name;
+	}
+
+	public void run() {
+	    //two things to say
+	    for (int i = 0; i < 2; i++) {
+		com.speak(i);
+		System.out.println(name + " says " + i);
+	    }
+	    System.out.println(name + " is done");
+	}
+
+	private Communicator com;
+	private String name;
+    }
+
+    private static class Listener implements Runnable {
+	Listener(Communicator com, String name) {
+	    this.com = com;
+	    this.name = name;
+	}
+
+	public void run() {
+	    //two things to hear
+	    for (int i = 0; i < 2; i++) {
+		int heard = com.listen();
+		System.out.println(name + " hears " + heard);
+	    }
+	    System.out.println(name + " is done");
+	}
+
+	private Communicator com;
+	private String name;
+    }
+
+    public static void selfTest() {
+	Communicator com1 = new Communicator();
+	
+	KThread thread1 = new KThread(new Speaker(com1, "Sherri"));
+	KThread thread2 = new KThread(new Listener(com1, "Yasin"));
+	KThread thread3 = new KThread(new Speaker(com1, "Karen"));
+	thread1.fork();
+	thread2.fork();
+	thread3.fork();
+	//once billy joe is done then the other people get cut off because he is the main thread which is done
+	new Listener(com1, "Billy Joe").run();
+    }
+
+    private Integer message = null;
+    private int listening = 0;
+    private Lock comLock = new Lock();
+    private Condition2 listener = new Condition2(comLock);
+    private Condition2 speaker = new Condition2(comLock);
 }

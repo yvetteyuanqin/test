@@ -136,6 +136,10 @@ public class OpenFile {
 	return -1;
     }
 
+    public String toString() {
+	return name;
+    }
+
     private FileSystem fileSystem;
     private String name;
 }

@@ -50,6 +50,10 @@ public final class TranslationEntry {
 	dirty = entry.dirty;
     }
 
+    public String toString() {
+	return "**VPN: " + vpn + " PPN: " + ppn + " Valid: " + valid;
+    }
+
     /** The virtual page number. */
     public int vpn;
     
