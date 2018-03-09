@@ -195,7 +195,7 @@ public class NetworkLink {
      */
     public Packet receive() {
 	Packet p = incomingPacket;
-	
+	System.out.println("incoming packet REVEIVE");
 	if (incomingPacket != null) {
 	    incomingPacket = null;
 	    scheduleReceiveInterrupt();
@@ -266,7 +266,7 @@ public class NetworkLink {
     private void sendPacket() {
 	Packet p = outgoingPacket;
 	outgoingPacket = null;
-	
+	System.out.println("send packet SEND");
 	try {
 	    socket.send(new DatagramPacket(p.packetBytes, p.packetBytes.length,
 					   localHost, portBase+p.dstLink));

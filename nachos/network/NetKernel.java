@@ -9,21 +9,21 @@ import nachos.network.*;
 /**
  * A kernel with network support.
  */
-public class NetKernel extends VMKernel {
+public class NetKernel extends UserKernel {
     /**
      * Allocate a new networking kernel.
      */
     public NetKernel() {
-	super();
+		super();
     }
 
     /**
      * Initialize this kernel.
      */
     public void initialize(String[] args) {
-	super.initialize(args);
+		super.initialize(args);
 
-	postOffice = new PostOffice();
+		postOffice = new PostOffice();
     }
 
     /**
@@ -35,6 +35,7 @@ public class NetKernel extends VMKernel {
     public void selfTest() {
 	super.selfTest();
 
+	/*
 	KThread serverThread = new KThread(new Runnable() {
 		public void run() { pingServer(); }
 	    });
@@ -52,6 +53,7 @@ public class NetKernel extends VMKernel {
 	// if we're 0 or 1, ping the opposite
 	if (local <= 1)
 	    ping(1-local);
+	*/
     }
 
     private void ping(int dstLink) {
@@ -61,12 +63,12 @@ public class NetKernel extends VMKernel {
 
 	long startTime = Machine.timer().getTime();
 	
-	MailMessage ping;
+	NetMessage ping;
 
 	try {
-	    ping = new MailMessage(dstLink, 1,
+	    ping = new NetMessage(dstLink, 1,
 				   Machine.networkLink().getLinkAddress(), 0,
-				   new byte[0]);
+				   3, 127986, "hello world".getBytes());
 	}
 	catch (MalformedPacketException e) {
 	    Lib.assertNotReached();
@@ -74,8 +76,8 @@ public class NetKernel extends VMKernel {
 	}
 
 	postOffice.send(ping);
-
-	MailMessage ack = postOffice.receive(0);
+	NetMessage ack = postOffice.receive(0);
+	System.out.println(Lib.bytesToString(ack.contents, 0, ack.contents.length));
 	
 	long endTime = Machine.timer().getTime();
 
@@ -84,13 +86,14 @@ public class NetKernel extends VMKernel {
 
     private void pingServer() {
 	while (true) {
-	    MailMessage ping = postOffice.receive(1);
+	    NetMessage ping = postOffice.receive(1);
 
-	    MailMessage ack;
-
+	    NetMessage ack;
+	    System.out.println(ping.status);
 	    try {
-		ack = new MailMessage(ping.packet.srcLink, ping.srcPort,
+		ack = new NetMessage(ping.packet.srcLink, ping.srcPort,
 				      ping.packet.dstLink, ping.dstPort,
+				      ping.status, ping.seqNum,
 				      ping.contents);
 	    }
 	    catch (MalformedPacketException e) {
@@ -116,7 +119,8 @@ public class NetKernel extends VMKernel {
 	super.terminate();
     }
 
-    private PostOffice postOffice;
+    //modified postOffice so it can be accessed elsewhere
+    public static PostOffice postOffice;
 
     // dummy variables to make javac smarter
     private static NetProcess dummy1 = null;

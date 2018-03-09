@@ -3,255 +3,198 @@ import nachos.ag.BoatGrader;
 
 public class Boat
 {
+    /*
+      NOTE: island B := molokai, island A := oahu
+
+      Our general algorithm is to ferry all the children from A to B by having two children row together from A to B and only one rowing back to A. After all of the children go, then one rows back to A, wakes up an adult. The adult rows to B, wakes up a child, and then is done. The child on B who woke up, rows to A, takes both children from A to B, and then one child rows back and repeats the process if there is an adult waiting to go. When it reaches to point where there are no more adults on A, the child rows back to B and finishes.
+
+      Because adults never row at first (because there are always 2 children on A at the beginning)
+     */
+
     static BoatGrader bg;
-    static final int Oahu = 0;
-    static final int Molokai = 1;
-    static int boatPosition = 0;
-    static int numOfChildrenOnMolokai = 0;
-    static int numOfAdultsOnOahu = 0;
-    static int numOfChildrenOnOahu = 0;
-    static int peopleOnBoat = 0;
-    static int m = 0;
-    static Lock conditionLock = new Lock();
-    static Condition OahuChildCondition = new Condition(conditionLock);
-    static Condition OahuAdultCondition = new Condition(conditionLock);
-    static Condition MolokaiChildCondition = new Condition(conditionLock);
-    static Condition boatCondition = new Condition(conditionLock);
-    static Alarm alarm = new Alarm();
-    static Semaphore s1 = new Semaphore(0);
-    static Semaphore s2 = new Semaphore(0);
+
+    //we keep a count of the number of children on each island, 
+    //the number of adults on each island, the number of children ready to go to B, and the number of
+    //children (0, 1, or 2) who just rowed together from A to B
+    private static int childrenOnA; 
+    private static int childrenOnB;
+    private static int adultsOnA;
+    private static int adultsOnB;
+    private static int cWaitBoatA;
+    private static int childrenFromBoat;
+
+    //boolean as to if the boat is on A or not
+    private static boolean boatAtA;
+
+    //lock an island when we're trying to access it so concurrent threads don't access an island at the same time
+    private static Lock islandA = new Lock();
+    private static Lock islandB = new Lock();
+
+    //condition for adults; if there are 2 or more children on the island then sleep
+    private static Condition adultA = new Condition(islandA);
+    //three conditions for children: 1 for sleeping on B if they aren't the child boating back.
+    //1 for waiting on A if there are already more than 2 children ready to go over
+    //1 for waiting for the second child to go with to go to B
+    private static Condition cWaitOnLandB = new Condition(islandB);    
+    private static Condition cWaitOnLandA = new Condition(islandA);
+    private static Condition cWaitForBoatA = new Condition(islandA);
+
+    //the main thread waits until our code says it's done
+    private static Semaphore doneSem = new Semaphore(0);
     
     public static void selfTest()
     {
 	BoatGrader b = new BoatGrader();
+
 	
-	//System.out.println("\n ***Testing Boats with only 2 children***");
-	//begin(16, 16, b);
+	// System.out.println("\n ***Testing Boats with only 2 children***");
+	// begin(0, 2, b);
 
-	//alarm.waitUntil(10000);
+	// System.out.println("\n ***Testing Boats with 2 children, 1 adult***");
+  	// begin(1, 2, b);
 
-	//begin(0, 16, b);
-
-	for (int i = 0; i < 7; i++) for (int j = 2; j < 7; j++) {System.out.println(i+" " + j); begin(i, j, b);}
-
-//	System.out.println("\n ***Testing Boats with 2 children, 1 adult***");
-//  	begin(1, 2, b);
-
-//  	System.out.println("\n ***Testing Boats with 3 children, 3 adults***");
-//  	begin(3, 3, b);
+  	System.out.println("\n ***Testing Boats with 3 children, 3 adults***");
+  	begin(3, 3, b);
     }
 
     public static void begin( int adults, int children, BoatGrader b )
     {
 	// Store the externally generated autograder in a class
 	// variable to be accessible by children.
-	bg = b;
 
 	// Instantiate global variables here
+	bg = b;
+	childrenOnA = children;
+	childrenOnB = 0;
+	adultsOnA = adults;
+	adultsOnB = 0;
+	cWaitBoatA = 0;
+	childrenFromBoat = 0;
+	boatAtA = true;
 	
 	// Create threads here. See section 3.4 of the Nachos for Java
 	// Walkthrough linked from the projects page.
-
-	/*Runnable r = new Runnable() {
-	    public void run() {
-                SampleItinerary();
-            }
-        };
-        KThread t = new KThread(r);
-        t.setName("Sample Boat Thread");
-        t.fork();*/
-
-	/** initialization */
-	boatPosition = 0;
-	numOfChildrenOnMolokai = 0;
-	numOfAdultsOnOahu = 0;
-	numOfChildrenOnOahu = 0;
-	peopleOnBoat = 0;
-	m = 0;
-	
-	Communicator com = new Communicator();
-
-	/** definition of Adult and Child class*/
-	class Adult implements Runnable{
-	    private Communicator com;
-	    public Adult(Communicator com){
-		this.com = com;
-	    }
-	    public void run(){
-		AdultItinerary(com);
-	    }
+	for (int i = 0; i < children; i++) {
+	    new KThread(new Runnable () { public void run() { ChildItinerary(); } }).setName("c" + i).fork();
 	}
 
-	class Child implements Runnable{
-	    private Communicator com;
-	    public Child(Communicator com){
-		this.com = com;
-	    }
-	    public void run(){
-		ChildItinerary(com);
-	    }
+	for (int i = 0; i < adults; i++) {
+	    new KThread(new Runnable () { public void run() { AdultItinerary(); } }).setName("a" + i).fork();
 	}
 
-	/** construct all adults and children threads*/
+	doneSem.P();
 
-	for (int i = 0; i < adults; i++){
-	    new KThread(new Adult(com)).fork();
-	}
+	/*
+	  Runnable r = new Runnable() {
+	  public void run() {
+	  SampleItinerary();
+	  }
+	  };
+	  KThread t = new KThread(r);
+	  t.setName("Sample Boat Thread");
+	  t.fork();
+	*/
 
-	for (int i = 0; i < children; i++){
-	    new KThread(new Child(com)).fork();
-	}
-
-	int sum = adults + children;
-
-	/*while(m < sum){
-	    //System.out.println("begin to listen");
-	    //s1.V();
-	    //System.out.println("release s1");
-	    //s2.P();
-	    //System.out.println("get s2");
-	    //m += com.listen();
-	    //alarm.waitUntil(1000);
-	    //System.out.println("m: " + m);
-	}*/
-	/** wait for the last person to respond */
-	s1.P();
-	//System.out.println("main function finished!");
     }
 
-    static void AdultItinerary(Communicator com)
+    static void AdultItinerary()
     {
-	bg.initializeAdult(); //Required for autograder interface. Must be the first thing called.
-	//DO NOT PUT ANYTHING ABOVE THIS LINE.
-
-	/** The logic of an adult is very simple, just sleep on Oahu and wait for waken up. Then he can try to get on the boat and get to Molokai(If failed, just go back sleep). After arriving Molokai, wake a child so that the child will row the boat back to Oahu. */
-
-	conditionLock.acquire();
-	numOfAdultsOnOahu += 1;
-	OahuAdultCondition.sleep();
-	//System.out.println("Adult wake up.");
-	while ((boatPosition != Oahu) || (peopleOnBoat > 0)) OahuAdultCondition.sleep();
-	bg.AdultRowToMolokai();
-	numOfAdultsOnOahu -= 1;
-	boatPosition = Molokai;
-	MolokaiChildCondition.wake();
-	//com.speak(1);
-	//s1.P();
-	//System.out.println("get s1");
-	//m += 1;
-	//s2.V();
-	//System.out.println("release s2");
-	conditionLock.release();
-
 	/* This is where you should put your solutions. Make calls
 	   to the BoatGrader to show that it is synchronized. For
 	   example:
-	       bg.AdultRowToMolokai();
+	   bg.AdultRowToMolokai();
 	   indicates that an adult has rowed the boat across to Molokai
 	*/
+	//lock the island because we have an adult bro accessing the island
+	islandA.acquire();
+	while (childrenOnA > 1 || !boatAtA) {
+	    //if there is more than one child, then the children should go first, so go to sleep
+	    adultA.sleep();
+	}
+	//otherwise we are free to boat!  fewer adults on A.  release lock because bro left.  not on A anymore
+	adultsOnA--;
+	boatAtA = false;
+	islandA.release();
+	bg.AdultRowToMolokai();
+	islandB.acquire();
+	adultsOnB++;
+	//when an adult gets to B, we want a child to pilot the boat back to A
+	cWaitOnLandB.wake();
+	//adult doesn't need lock anymore because they're not doing anything ever again
+	islandB.release();
     }
 
-    static void ChildItinerary(Communicator com)
+    static void ChildItinerary()
     {
-	bg.initializeChild(); //Required for autograder interface. Must be the first thing called.
-	//DO NOT PUT ANYTHING ABOVE THIS LINE. 
-
-	/** The algorithm of a child is not that easy. First we assume that there are at least two child, and it must be a child that first get on the boat. He will wait for the second child to get on and row both two to Molokai and the rider will come back. The rider is also responsible for caching the number of people on Oahu. If when the boat leave Oahu and no one is still there, we conclude that the task is finished. Actually, this is the tricky part because we may miss somebody. However, the only one that could know for certain that the task is finished is the main thread, which cannot send any kind of signal to the individuals, so the children may act more than they have to and stop at an unexpected time, which will consequent that I can only be sure that a prefix of the result is correct, which is worse that the current solution in my opinion. The rest part is trivial, when a child get to Molokai he can just sleep, and when he is woken up the only thing he needs to do is row back the boat to Oahu, and so on... */
-
-	int cache = 0;
-	int position = Oahu;
-	numOfChildrenOnOahu += 1; // number of children on Oahu, cannot be seen when one is on Molokai, but can be cached.
-	while (true){ //recursively run
-	    conditionLock.acquire();
-	    /** strategy of children on Oahu */
-	    if (position == Oahu){
-		while ((boatPosition != Oahu) || (peopleOnBoat > 1)) OahuChildCondition.sleep();
-		if (peopleOnBoat == 0){ // he is the first one to get on board
-		    //System.out.println("first child on boat");
-		    peopleOnBoat += 1;
-		    numOfChildrenOnOahu -= 1;
-		    OahuChildCondition.wakeAll();
-		    //System.out.println("sleep on boat");
-		    boatCondition.sleep();
-		    position = Molokai;
-		    numOfChildrenOnMolokai += 1;
-		    MolokaiChildCondition.sleep();
-		}
-		else{ // he is the second one
-		    boatCondition.wake();
-		    numOfChildrenOnOahu -= 1;
-		    //System.out.println("speak 0 to main");
-		    //com.speak(0);
-		    alarm.waitUntil(1000);
-		    cache = numOfChildrenOnOahu + numOfAdultsOnOahu;
-		    //KThread.currentThread().yield();
-		    //s1.P();
-		    //System.out.println("get s1");
-		    //m += 0;
-		    //s2.V();
-		    //System.out.println("release s2");
-		    //System.out.println("speak 0 to main returned");
-		    bg.ChildRowToMolokai();
-		    //System.out.println("speak 1 to main");
-		    //com.speak(1);
-		    //s1.P();
-		    //System.out.println("get s1");
-		    //m += 1;
-		    //s2.V();
-		    //System.out.println("release s2");
-		    //System.out.println("speak 1 to main returned");
-		    bg.ChildRideToMolokai();
-		    OahuChildCondition.wakeAll();
-		    boatPosition = Molokai;
-		    peopleOnBoat = 0;
-		    //System.out.println("speak 1 to main");
-		    //com.speak(1);
-		    //s1.P();
-		    //System.out.println("get s1");
-		    //m += 1;
-		    //s2.V();
-		    //System.out.println("release s2");
-		    //System.out.println("speak 1 to main returned");
-		    position = Molokai;
-		    //cache = numOfChildrenOnOahu + numOfAdultsOnOahu;
-		    //System.out.println("cache: " + cache);
-		    if (cache > 0){
-			bg.ChildRowToOahu();
-			position = Oahu;
-			boatPosition = Oahu;
-			numOfChildrenOnOahu += 1;
-			OahuAdultCondition.wake();
-			//com.speak(0);
-			//s1.V();
-			//s1.P();
-			//m += -1;
-			//s2.V();
-			OahuChildCondition.sleep();
-		    }
-		    else{ // send signal to begin()
-			s1.V();
-			MolokaiChildCondition.sleep();
-		    }
-		}
+	//while there are people still on the island
+	while (childrenOnA + adultsOnA > 1) {
+	    //we're doing stuff to the island so we need to lock it
+	    islandA.acquire();
+	    if (childrenOnA == 1) {
+		//we can only boat children if there are two of them, but otherwise, then an adult should go
+		adultA.wake();
 	    }
-	    /** strategy of children on Molokai */
-	    else{
-		numOfChildrenOnOahu += 1;
-		numOfChildrenOnMolokai -= 1;
-		position = Oahu;
-		bg.ChildRowToOahu();
-		boatPosition = Oahu;
-		//System.out.println("gg");
-		//System.out.println("begin to speak to main");
-		//com.speak(-1);
-		//System.out.println("gg");
-		//s1.P();
-		//m += -1;
-		//s2.V();
-		OahuChildCondition.wakeAll();
+	    while (cWaitBoatA >= 2 || !boatAtA) {
+		//there are enough children to boat over to B
+		//let the other child go first
+		cWaitOnLandA.sleep();
 	    }
-	    conditionLock.release();
+	    if (cWaitBoatA == 0) { //if no other child ready to go over
+		cWaitBoatA++;
+		//get a buddy by waking up thread
+		cWaitOnLandA.wake();
+		//wait for child to go across with
+		cWaitForBoatA.sleep();
+		bg.ChildRideToMolokai();
+		//wake up the rower to get off on B
+		cWaitForBoatA.wake();
+	    } else { 
+		//if there's already someone ready to go
+		cWaitBoatA++;
+		//wake up the passenger
+		cWaitForBoatA.wake();
+		bg.ChildRowToMolokai();
+		//sleep to wait for passenger to come over
+		cWaitForBoatA.sleep();
+	    }
+	    //they're off the boat
+	    cWaitBoatA--;
+	    //and off A
+	    childrenOnA--;
+	    boatAtA = false;
+	    islandA.release();
+	    //this is the point where they get to B
+	    islandB.acquire();
+	    //eventually both child threads will hit this, increment for each hit
+	    childrenOnB++;
+	    //marking that the child is off of the boat
+	    childrenFromBoat++;
+	    if (childrenFromBoat == 1) {
+		//only one child from the previous 2 child boat trip sleeps
+		cWaitOnLandB.sleep();
+	    }
+	    //always one child has to go back to A 
+	    childrenOnB--;
+	    //boat is going back over so children arriving from A gets reset
+	    childrenFromBoat = 0;
+	    islandB.release();
+	    bg.ChildRowToOahu();
+	    islandA.acquire();
+	    childrenOnA++;
+	    boatAtA = true;
+	    islandA.release();
 	}
+	//to check if people are still on the original island
+	islandA.acquire();
+	childrenOnA--;
+	islandA.release();
+	bg.ChildRowToMolokai();
+	islandB.acquire();
+	childrenOnB++;
+	islandB.release();
+	System.out.println("Children A/B: " + childrenOnA + " / " + childrenOnB);
+	System.out.println("Adults A/B: " + adultsOnA + " / " + adultsOnB);
+	doneSem.V();
     }
 
     static void SampleItinerary()

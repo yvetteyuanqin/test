@@ -14,18 +14,6 @@ public class BoatGrader {
      * this class does not imply that any of the indicated actions
      * are a good idea or even allowed.
      */
-	
-	//NEW ADDITION FOR 2014
-	//MUST BE CALLED AT THE START OF CHILDITINERARY!
-	public void initializeChild(){
-		System.out.println("A child has forked.");
-	}
-	
-	//NEW ADDITION FOR 2014
-	//MUST BE CALLED AT THE START OF ADULTITINERARY!
-	public void initializeAdult(){
-		System.out.println("An adult as forked.");
-	}
 
     /* ChildRowToMolokai should be called when a child pilots the boat
        from Oahu to Molokai */

@@ -10,8 +10,6 @@ import java.util.LinkedList;
  * A kernel that can support multiple user processes.
  */
 public class UserKernel extends ThreadedKernel {
-	private static LinkedList<Integer> freePages = new LinkedList<Integer>();
-
     /**
      * Allocate a new user kernel.
      */
@@ -24,18 +22,21 @@ public class UserKernel extends ThreadedKernel {
      * processor's exception handler.
      */
     public void initialize(String[] args) {
-		super.initialize(args);
+	super.initialize(args);
 
-		console = new SynchConsole(Machine.console());
+	console = new SynchConsole(Machine.console());
+	
+	processIDSem = new Semaphore(1);
+	freePagesSem = new Semaphore(1);
 
-		int numPhysPages = Machine.processor().getNumPhysPages();
-		for (int i = 0; i < numPhysPages; ++i) {
-			freePages.add(i);
-		}
+	//create list of free pages
+	for (int i = 0; i < Machine.processor().getNumPhysPages(); i++) {
+	    freePages.add(i);
+	}
 
-		Machine.processor().setExceptionHandler(new Runnable() {
-			public void run() { exceptionHandler(); }
-			});
+	Machine.processor().setExceptionHandler(new Runnable() {
+		public void run() { exceptionHandler(); }
+	    });
     }
 
     /**
@@ -57,22 +58,6 @@ public class UserKernel extends ThreadedKernel {
 
 	System.out.println("");
     }
-
-    public static int getFreePage() {
-    	int pageNumber = -1;
-    	boolean interruptStatus = Machine.interrupt().disable();
-    	if (freePages.isEmpty() == false) {
-    		pageNumber = freePages.removeFirst();
-		}
-		Machine.interrupt().restore(interruptStatus);
-		return pageNumber;
-	}
-
-	public static void addFreePage(int pageNumber) {
-    	boolean interruptStatus = Machine.interrupt().disable();
-    	freePages.addFirst(pageNumber);
-    	Machine.interrupt().restore(interruptStatus);
-	}
 
     /**
      * Returns the current process.
@@ -119,9 +104,8 @@ public class UserKernel extends ThreadedKernel {
 
 	UserProcess process = UserProcess.newUserProcess();
 	
-	String shellProgram = Machine.getShellProgramName();	
+	String shellProgram = Machine.getShellProgramName();
 	Lib.assertTrue(process.execute(shellProgram, new String[] { }));
-
 	KThread.currentThread().finish();
     }
 
@@ -137,4 +121,11 @@ public class UserKernel extends ThreadedKernel {
 
     // dummy variables to make javac smarter
     private static Coff dummy1 = null;
+
+    public static int newProcessID = 0;
+
+    public static Semaphore processIDSem;
+    public static Semaphore freePagesSem;
+
+    public static LinkedList<Integer> freePages = new LinkedList<Integer>();;
 }

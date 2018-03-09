@@ -1,7 +1,8 @@
 package nachos.threads;
 
 import nachos.machine.*;
-import java.util.*;
+
+import java.util.ArrayList;
 
 /**
  * A KThread is a thread that can be used to execute Nachos kernel code. Nachos
@@ -159,6 +160,7 @@ public class KThread {
     private void runThread() {
 	begin();
 	target.run();
+	joinSemaphore.V();
 	finish();
     }
 
@@ -194,9 +196,7 @@ public class KThread {
 
 
 	currentThread.status = statusFinished;
-
-	currentThread.joinSem.V(); /** tell others I have finished */
-
+	
 	sleep();
     }
 
@@ -279,11 +279,8 @@ public class KThread {
 	Lib.debug(dbgThread, "Joining to thread: " + toString());
 
 	Lib.assertTrue(this != currentThread);
-
-	this.joinSem.P(); /** waiting for the thread's finish without busy waiting */
-
-	return;
-
+	//does exactly what you think it does.  basically it locks the thread until it is ready
+	joinSemaphore.P();
     }
 
     /**
@@ -394,7 +391,7 @@ public class KThread {
 	}
 	
 	public void run() {
-	    for (int i=0; i<5; i++) {
+	    for (int i = 0; i < which; i++) {
 		System.out.println("*** thread " + which + " looped "
 				   + i + " times");
 		currentThread.yield();
@@ -403,220 +400,97 @@ public class KThread {
 
 	private int which;
     }
- 
-    private static class PingTest2 implements Runnable  
-    {  
-        Lock a=null,b=null;  
-        int name;  
-        PingTest2(Lock A,Lock B,int x)  
-        {  
-            a=A;b=B;name=x;  
-        }  
-        public void run() {  
-            System.out.println("Thread "+name+" starts.");  
-            if(b!=null)  
-            {  
-                System.out.println("Thread "+name+" waits for Lock b.");  
-                b.acquire();  
-                System.out.println("Thread "+name+" gets Lock b.");  
-            }  
-            if(a!=null)  
-            {  
-                System.out.println("Thread "+name+" waits for Lock a.");  
-                a.acquire();  
-                System.out.println("Thread "+name+" gets Lock a.");  
-            }  
-            KThread.yield();  
-            boolean intStatus = Machine.interrupt().disable();  
-            System.out.println("Thread "+name+" has priority "+ThreadedKernel.scheduler.getEffectivePriority()+".");  
-            Machine.interrupt().restore(intStatus);  
-            KThread.yield();  
-            if(b!=null) b.release();  
-            if(a!=null) a.release();  
-            System.out.println("Thread "+name+" finishs.");  
-              
-        }  
-    }  
-
-
-    private static class CommunicateTest implements Runnable {
-	CommunicateTest(boolean flag, Communicator com, int word) {
-	    this.flag = flag;
-	    this.com = com;
-	    this.word = word;
-	}
-
-	public void run() {
-	    if (flag) {for (int i = 0; i < 10; i++) com.speak(word);}
-	    else {for (int i = 0; i < 10; i++) System.out.println(com.listen());}
-	}
-
-	private boolean flag;
-	private Communicator com;
-	private int word;
-    }
-
-    private static class AlarmTest implements Runnable {
-	AlarmTest(Alarm alarm, long time, int num) {
-	    this.alarm = alarm;
-	    this.time = time;
-	    this.num = num;
-	}
-
-	public void run()
-	{
-    		System.out.println(num + " previous time: " + Machine.timer().getTime());
-  		//ThreadedKernel.alarm.waitUntil(1000);
-		alarm.waitUntil(time);
-    		System.out.println(num + " posterior time: " + Machine.timer().getTime());
-    	}
-
-	private Alarm alarm;
-	private long time;
-	private int num;
-    }
 
     /**
      * Tests whether this module is working.
      */
     public static void selfTest() {
-	
-	/** original test */
-
 	Lib.debug(dbgThread, "Enter KThread.selfTest");
-	if(false){
-	new KThread(new PingTest(1)).setName("forked thread").fork();
-	new PingTest(0).run();
+	
+	KThread thread1 = new KThread(new PingTest(3)).setName("forked thread 1");
+	KThread thread2 = new KThread(new PingTest(7)).setName("forked thread 2");
+	thread1.fork();
+	thread2.fork();
+	//fork two threads, and call join on one of them
+	System.out.println("Start Join");
+	thread1.join();
+	System.out.println("Join Complete");
+	//so it shouldn't run until the other one completes
+	new PingTest(12).run();
 
-	/** test of task I */
-	PingTest testThread = new PingTest(2);
-	KThread testKThread = new KThread(testThread);
-	testKThread.fork();
-	testKThread.join();
+	System.out.println("******************");
+	conditionTest();
+	Lib.debug(dbgThread, "End KThread.selfTest");
+    }
 
-	/**test of task II*/
+    private static class Producer implements Runnable {
+	//producer for a condition test
+	Producer(ArrayList<Integer> store, Lock lock, Condition2 cond) {
+	    this.store = store;
+	    this.lock = lock;
+	    this.cond = cond;
+	}
+	
+	public void run() {
+	    for (int i = 0; i < 10; i++) {
+		System.out.println("Producer starts running and gets tired fast");
+		currentThread.yield();
+		lock.acquire();
+		System.out.println("*** thread producer added " + i);
+		store.add(1);
+		cond.wake();
+		System.out.println(store);
+		lock.release();
+		currentThread.yield();
+	    }
+	}
 
-	Lock lock = new Lock();
-    	Condition2 condition2 = new Condition2(lock);
-    	Runnable runnableA = new Runnable()
-    	{
-    		public void run()
-    		{
-    			lock.acquire();
-    			//KThread.currentThread().yield();
-    			condition2.wake();
-    			System.out.println("thread A begin");
-			System.out.println("A sleep");
-    			condition2.sleep();
-			System.out.println("A wake");
-    			lock.release();
-    			System.out.println("thread A end");
-    		}
-    	}, runnableB = new Runnable()
-    	{
-    		public void run()
-    		{
-    			lock.acquire();
-    			//KThread.currentThread().yield();
-    			condition2.wake();
-    			System.out.println("thread B begin");
-			System.out.println("B sleep");
-    			condition2.sleep();
-			System.out.println("B wake");
-    			lock.release();
-    			System.out.println("thread B end");
-    		}
-    	};
-    	new KThread(runnableA).fork();
-    	new KThread(runnableB).fork();
+	private ArrayList<Integer> store;
+	private Lock lock;
+	private Condition2 cond;
+    }
 
-	/** test of task III */
+    private static class Consumer implements Runnable {
+	//consumer for a condition test
+	Consumer(ArrayList<Integer> store, Lock lock, Condition2 cond) {
+	    this.store = store;
+	    this.lock = lock;
+	    this.cond = cond;
+	}
+	
+	public void run() {
+	    for (int i = 0; i < 5; i++) {
+		lock.acquire();
+		while (store.size() == 0) {
+		    System.out.println("Sleep");
+		    cond.sleep();
+		}
+		System.out.println("*** thread consumer remove " + i);
+		int item = store.remove(store.size() - 1);
+		System.out.println("Item: " + item);
+		lock.release();
+		currentThread.yield();
+	    }
+	}
 
-	Alarm alarm = new Alarm();
-	/*Runnable alarmTest = new Runnable()
-    	{
-    		public void run()
-    		{
-    			System.out.println("previous time: " + Machine.timer().getTime());
-    			//ThreadedKernel.alarm.waitUntil(1000);
-			alarm.waitUntil(1000);
-    			System.out.println("posterior time: " + Machine.timer().getTime());
-    		}
-    	};*/
-    	KThread k1 = new KThread(new AlarmTest(alarm, 5000, 1));
-    	KThread k2 = new KThread(new AlarmTest(alarm, 4000, 2));
-    	KThread k3 = new KThread(new AlarmTest(alarm, 3000, 3));
-    	KThread k4 = new KThread(new AlarmTest(alarm, 2000, 4));
-    	KThread k5 = new KThread(new AlarmTest(alarm, 1000, 5));
-	k1.fork();
-	k2.fork();
-	k3.fork();
-	k4.fork();
-	k5.fork();
-	k1.join();
-	k2.join();
-	k3.join();
-	k4.join();
-	k5.join();
+	private ArrayList<Integer> store;
+	private Lock lock;
+	private Condition2 cond;
+    }
 
-	/** test of task IV */
-	Communicator com = new Communicator();
-	new KThread(new CommunicateTest(false, com, 1)).fork();
-	new KThread(new CommunicateTest(true, com, 2)).fork();
-	new KThread(new CommunicateTest(true, com, 3)).fork();
-	new KThread(new CommunicateTest(false, com, 4)).fork();
-	new KThread(new CommunicateTest(true, com, 5)).fork();
-	new KThread(new CommunicateTest(false, com, 6)).fork();
-	new KThread(new CommunicateTest(false, com, 1)).fork();
-	new KThread(new CommunicateTest(true, com, 2)).fork();
-	new KThread(new CommunicateTest(true, com, 3)).fork();
-	new KThread(new CommunicateTest(false, com, 4)).fork();
-	new KThread(new CommunicateTest(true, com, 5)).fork();
-	new KThread(new CommunicateTest(false, com, 6)).fork();
-	new KThread(new CommunicateTest(true, com, 7)).fork();
-	new CommunicateTest(false, com, 8).run();
+    public static void conditionTest() {
+	//self test for Condition2 
+	Lib.debug(dbgThread, "Enter KThread.conditionTest");
+	//we just tested this by making sure it did the same thing as the regular condition.  it did.
+	ArrayList<Integer> store = new ArrayList<Integer>();
+	Lock storeLock = new Lock();
+	Condition2 storeCond = new Condition2(storeLock);
 
-	/** test of task V */
+	KThread thread1 = new KThread(new Producer(store, storeLock, storeCond)).setName("producer 1");
+	thread1.fork();
+	new Consumer(store, storeLock, storeCond).run();
 
-	alarm.waitUntil(10000);
-	Lock a=new Lock();  
-        Lock b=new Lock();  
-          
-        Queue<KThread> qq=new LinkedList<KThread>();  
-        for(int i=1;i<=5;i++)  
-        {  
-            KThread kk=new KThread(new PingTest2(null,null,i));  
-            qq.add(kk);  
-            kk.setName("Thread-"+i).fork();  
-        }  
-        for(int i=6;i<=10;i++)  
-        {  
-            KThread kk=new KThread(new PingTest2(a,null,i));  
-            qq.add(kk);  
-            kk.setName("Thread-"+i).fork();  
-        }  
-        for(int i=11;i<=15;i++)  
-        {  
-            KThread kk=new KThread(new PingTest2(a,b,i));  
-            qq.add(kk);  
-            kk.setName("Thread-"+i).fork();  
-        }  
-        KThread.yield();  
-        Iterator it=qq.iterator();  
-        int pp=0;  
-        while(it.hasNext())  
-        {  
-            boolean intStatus = Machine.interrupt().disable();  
-            ThreadedKernel.scheduler.setPriority((KThread)it.next(),pp+1);  
-            Machine.interrupt().restore(intStatus);  
-            pp++;
-            if(pp>6)pp-=6;
-        }  
-
-	/** test of task VI */
-	alarm.waitUntil(10000);
-	Boat boat = new Boat();
-	boat.selfTest();}
+	Lib.debug(dbgThread, "End KThread.conditionTest");
     }
 
     private static final char dbgThread = 't';
@@ -643,7 +517,6 @@ public class KThread {
     private String name = "(unnamed thread)";
     private Runnable target;
     private TCB tcb;
-    private Semaphore joinSem= new Semaphore(0); /** A semaphore for join and its initialization*/
 
     /**
      * Unique identifer for this thread. Used to deterministically compare
@@ -657,4 +530,8 @@ public class KThread {
     private static KThread currentThread = null;
     private static KThread toBeDestroyed = null;
     private static KThread idleThread = null;
+
+    //creates a new semaphore for each thread initialized to 0
+    //if this thread is a child thread, when it finishes running, increment semaphore
+    private Semaphore joinSemaphore = new Semaphore(0);
 }
