@@ -1,18 +1,14 @@
-nachos
-======
+nachos OS project
+=================
 
-nachos networks project by gellesr and frenchh
-https://github.com/phrenchphry11/nachos
+Project 1:Build the threading system
 
-changed files:
-	network/NetProcess (modified)
-	network/PostOffice (modified)
-	network/NetKernel (modified)
-	network/NetMessage (added)
+implementation:Thread Join,Condition Variable,Alarm,Synchronous Communication,Priority Scheduling,Boat                 problem
+          
+Project 2:Multiprogramming
 
-	userprog/Connection (added)
+implementation:File System Call(create,open,read,write,close,unlink),System Call(exec,exit,halt,join),Memory           Allocation
+          
+Project 3:Virtual Memory
 
-	proj4/Makefile (modified)
-	
-	nachos/Makefile (modified)
-
+implementation:PageTable,TLB,Page Demanding,Lazy Load

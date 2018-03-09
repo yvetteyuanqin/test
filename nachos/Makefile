@@ -19,14 +19,14 @@ ag =		AutoGrader BoatGrader
 threads =	ThreadedKernel KThread Alarm \
 		Scheduler ThreadQueue RoundRobinScheduler \
 		Semaphore Lock Condition SynchList \
-		Condition2 Semaphore2 Communicator Rider ElevatorController \
-		PriorityScheduler LotteryScheduler Boat Restroom ReadersWriters ReadersWriters1
+		Condition2 Communicator Rider ElevatorController \
+		PriorityScheduler LotteryScheduler Boat
 
-userprog =	UserKernel UThread UserProcess SynchConsole Connection
+userprog =	UserKernel UThread UserProcess SynchConsole
 
 vm =		VMKernel VMProcess
 
-network = 	NetKernel NetProcess PostOffice MailMessage NetMessage
+network = 	NetKernel NetProcess PostOffice MailMessage
 
 ALLDIRS = machine security ag threads userprog vm network
 
