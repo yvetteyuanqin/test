@@ -7,7 +7,11 @@ arising from memory management errors, and improving debugging support.
 Getting Nachos:
 
 Download nachos-java.tar.gz from the Projects section of the class
-homepage. Then, unpack it with these commands:
+homepage at:
+
+	http://www-inst.EECS.Berkeley.EDU/~cs162/
+
+Unpack it with these commands:
 
 	gunzip -c nachos-java.tar.gz | tar xf -
 
